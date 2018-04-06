@@ -1,0 +1,174 @@
+---
+title: "German Credit Data Exploration_2"
+author: "Dr. Prashant Mishra"
+date: "3/26/2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+1. Import the Clean data
+======================================================
+We already have a clean file "german_credit_full.csv" to import. 
+```{r}
+credit_dataset <- read.csv("german_credit_full.csv",stringsAsFactors = TRUE)
+str(credit_dataset)
+colnames(credit_dataset)
+```
+
+2. Explore Class vs Checking Account Status, Credit History and Employment Duration
+===================================================================================
+
+```{r}
+library(gmodels)
+CrossTable(credit_dataset$CheckingAccountStatus, credit_dataset$Class)
+```
+
+
+
+```{r}
+library(ggplot2)
+pl1 = ggplot(credit_dataset, aes(x = CheckingAccountStatus, fill = Class));
+pl2 = pl1 + geom_bar()
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+pl3 = pl1 + geom_bar(position = "fill") + ylab("proportion")
+pl3+ theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+Two points:
+
+1. It seems people who have Checking Account but only get amount between 0-200 DM are more likely to be a bad loan profile. 
+2. People who don't have a checking account might have account else where (other banks). 
+
+
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = CheckingAccountStatus, fill = EmploymentDuration));
+pl2 = pl1 + geom_bar()+facet_grid(~Class)
+pl2+ theme(axis.text.x = element_text(angle = 90, hjust = 1))
+pl2 = pl1 + geom_bar(position = "fill") + ylab("proportion")+facet_grid(~Class)
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = CheckingAccountStatus, fill = CreditHistory));
+pl2 = pl1 + geom_bar()+facet_grid(~Class)
+pl2+ theme(axis.text.x = element_text(angle = 90, hjust = 1))
+pl2 = pl1 + geom_bar(position = "fill") + ylab("proportion")+facet_grid(~Class)
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+2. Explore Class vs Purpose, Personal and Property
+======================================================
+
+```{r}
+CrossTable(credit_dataset$Purpose,credit_dataset$Class)
+CrossTable(credit_dataset$Personal,credit_dataset$Class)
+CrossTable(credit_dataset$Property,credit_dataset$Class)
+```
+
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = Purpose, fill = Class));
+pl1 + geom_bar()+ theme(axis.text.x = element_text(angle = 90, hjust = 1))
+pl1 + geom_bar(position = "fill") + ylab("proportion")+ theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = Purpose, fill = Personal));
+pl2 = pl1 + geom_bar()+facet_grid(~Class)
+pl2+ theme(axis.text.x = element_text(angle = 90, hjust = 1))
+pl2 = pl1 + geom_bar(position = "fill") +ylab("proportion")+facet_grid(~Class)
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = Purpose, fill = Property));
+pl2 = pl1 + geom_bar()+facet_grid(~Class)
+pl2+ theme(axis.text.x = element_text(angle = 90, hjust = 1))
+pl2 = pl1 + geom_bar(position = "fill") + ylab("proportion")+facet_grid(~Class)
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+1. New Car loan seems to be worse than used car loans and any other loan.
+
+2. Property doesn't seem to play a huge role as a deciding factor.
+
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = Purpose, y = Amount, color=Purpose));
+pl2 = pl1 + geom_boxplot()+facet_grid(~Class)
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = Personal, y = Amount, color=Personal));
+pl2 = pl1 + geom_boxplot()+facet_grid(~Class)
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = Job, y = Amount, color=Job));
+pl2 = pl1 + geom_boxplot()+facet_wrap(~Class,ncol = 2)
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = Housing, y = Amount, color=Class));
+pl2 = pl1 + geom_boxplot()+facet_wrap(~Personal,ncol=2)
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = Purpose, y = Duration, color=Class));
+pl2 = pl1 + geom_boxplot()+facet_wrap(~Personal,ncol=2)
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = Personal, y = Amount, color=Class));
+pl2 = pl1 + geom_boxplot()+facet_wrap(~Purpose, ncol = 5)
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+1. Used car data show that that Female.NotSingle tend to take higher loan for Used car, and are more likely bad loans. 
+2. Unsual data for Others, we might need to get more data on that. 
+
+
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = Personal, y = Amount, color=Class));
+pl2 = pl1 + geom_boxplot()+facet_wrap(~Job,ncol=2)
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+1. Male single, Unemployed and Unskilled--- high risk
+2. Female Not Single --- Also high risk
+3. Male Divored/Separated Unskilled Resident -- high risk
+
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = Personal, y = Amount, color=Class));
+pl2 = pl1 + geom_boxplot()+facet_wrap(~CheckingAccountStatus,ncol=2)
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+pl1 = ggplot(credit_dataset, aes(x = Personal, y = Amount, color=Class));
+pl2 = pl1 + geom_boxplot()+facet_wrap(~CreditHistory,ncol=3)
+pl2 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+Just some detective skill: We can see the outlier in NoCredit.AllPaid, Female.NotSingle. Some one from Highskilled, management or self employed category with checking account status between 0 to 200 took the loan for others category. 
+
+
+
+
+
+
+
+
+
+
