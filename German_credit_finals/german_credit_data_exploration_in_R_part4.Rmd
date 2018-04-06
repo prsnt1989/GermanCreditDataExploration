@@ -1,0 +1,400 @@
+---
+title: "German Credit Data Exploration_4"
+author: "Dr. Prashant Mishra"
+date: "3/27/2018"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+ml_credit_dataset <- read.csv("ml_credit_dataset.csv")
+str(ml_credit_dataset)
+```
+
+
+Making a Machine Learning task using mlr
+========================================================
+
+```{r}
+library(mlr)
+credit.task = makeClassifTask(data = ml_credit_dataset, target = "Class")
+credit.task = removeConstantFeatures(credit.task)
+credit.task
+```
+
+Cost-sensitive classification
+========================================================
+-In regular classification the aim is to minimize the misclassification rate and thus all types of misclassification errors are deemed equally severe. 
+
+-A more general setting is cost-sensitive classification where the costs caused by different kinds of errors are not assumed to be equal and the objective is to minimize the expected costs.
+
+-In case of class-dependent costs the costs depend on the true and predicted class label. The costs c(k,l) for predicting class k if the true label is l are usually organized into a K×K cost matrix where K is the number of classes.
+
+-Naturally, it is assumed that the cost of predicting the correct class label y is minimal (that is c(y,y)≤c(k,y) for all k=1,…,K).
+
+Class-dependent misclassification costs
+========================================================
+-There are some classification methods that can accomodate misclassification costs directly. One example is rpart.
+
+-Alternatively, we can use cost-insensitive methods and manipulate the predictions or the training data in order to take misclassification costs into account. mlr supports  $\textbf{ thresholding }$ and $\textbf{ rebalancing }$.
+
+-$\textbf{Thresholding: }$ The thresholds used to turn posterior probabilities into class labels, are chosen such that the costs are minimized. This requires a Learner that can predict posterior probabilities. During training the costs are not taken into account.
+
+-$\textbf{Rebalancing: }$ The idea is to change the proportion of the classes in the training data set in order to account for costs during training, either by $\textem{weighting}$ or by $\textem{sampling}$. Rebalancing does not require that the Learner can predict probabilities.
+
+----- For weighting we need a Learner that supports class weights or observation weights.
+
+----- If the Learner cannot deal with weights the proportion of classes can be changed by over- and undersampling.
+
+
+Cost Matrix for German Credit Data
+```{r}
+costs = matrix(c(0, 1, 5, 0), 2)
+colnames(costs) = rownames(costs) = getTaskClassLevels(credit.task)
+costs
+```
+
+So, the maximum cost is 5 and minimum 0. We penalize if the true class was "Bad" but the model predicts "Good".
+
+1. Thresholding
+========================================================
+We start by fitting a logistic regression model to the German credit data set and predict posterior probabilities.
+
+```{r}
+logisticLrn = makeLearner("classif.multinom", predict.type = "prob")
+
+logisticModel = mlr::train(logisticLrn, credit.task)
+
+logisticpred = predict(logisticModel, task = credit.task)
+
+logisticpred
+
+```
+
+We also fit the data with C50 alogorithm.
+```{r}
+c50Lrn = makeLearner("classif.C50", predict.type = "prob")
+c50Model = mlr::train(c50Lrn, credit.task)
+c50pred = predict(c50Model, task = credit.task)
+c50pred
+```
+
+
+i. Theoretical thresholding
+========================================================
+The default thresholds for both classes are 0.5. But according to the cost matrix we should predict class Good only if we are very sure that Good is indeed the correct label. Therefore we should increase the threshold for class Good and decrease the threshold for class Bad.
+
+The theoretical threshold for the positive class in two class case can be calculated from the cost matrix as :
+$t^* = \frac{c(+1,-1)-c(-1,-1)}{c(+1,-1)-c(+1,+1)+c(-1,+1)-c(-1,-1)}$
+This formula comes from the fact that cost of predicting class 1(given the actual is class 1) must be less than cost of predicting -1.
+$P(j=-1|x)c(+1,-1) + P(j=+1|x)c(+1,+1) \leq P(j=-1|x)c(-1,-1) + P(j=+1|x)c(-1,+1)$
+if we take $p = P(j=+1|x)$ then a threshold value can be derived from,
+$(1-t^*)c(+1,-1)+t^*c(-1,-1) = (1-t^*)c(-1,-1)+t^*c(-1,+1)$
+
+
+Theoretical threshhold
+========================================================
+Calculate the theoretical threshold for the positive class:
+Since c(+1,+1)=c(-1,-1)=0
+```{r}
+th = costs[2,1]/(costs[2,1] + costs[1,2])
+th
+```
+-you can change thresholds in mlr either before training by using the "predict.threshold"" option of makeLearner or after prediction by calling setThreshold on the Prediction object.
+
+-Predict class labels according to the theoretical threshold
+```{r}
+logisticpred.th = setThreshold(logisticpred, th)
+logisticpred.th
+```
+
+```{r}
+c50pred.th = setThreshold(c50pred, th)
+c50pred.th
+```
+
+
+Creating a cost measure
+========================================================
+In order to calculate the average costs over the entire data set we first need to create a new performance Measure. This can be done through function makeCostMeasure. It is expected that the rows of the cost matrix indicate true and the columns predicted class labels.
+```{r}
+credit.costs = makeCostMeasure(id = "credit.costs", name = "Credit costs", costs = costs,
+  best = 0, worst = 5)
+credit.costs
+```
+
+Performace measure : Credit cost and Error
+========================================================
+Then the average costs can be computed by function performance. Below we compare the average costs and the error rate (mmce) of the learning algorithm with both default thresholds 0.5 and theoretical thresholds.
+
+Performance with default thresholds 0.5
+```{r}
+performance(logisticpred, measures = list(credit.costs, mmce))
+calculateConfusionMatrix(logisticpred, relative = TRUE)
+```
+```{r}
+performance(c50pred, measures = list(credit.costs, mmce))
+calculateConfusionMatrix(c50pred, relative = TRUE)
+```
+
+
+Performance with theoretical thresholds
+```{r}
+performance(logisticpred.th, measures = list(credit.costs, mmce))
+
+calculateConfusionMatrix(logisticpred.th, relative = TRUE)
+```
+
+```{r}
+performance(c50pred.th, measures = list(credit.costs, mmce))
+calculateConfusionMatrix(c50pred.th, relative = TRUE)
+```
+
+
+Getting Performance measure with Cross-Validation
+========================================================
+These performance values may be overly optimistic as we used the same data set for training and prediction, and resampling strategies should be preferred.
+
+Cross-validated performance with theoretical thresholds
+
+```{r}
+# we create a ResampleInstance (rin) that is used throughout the next several code chunks to get comparable performance values.
+rin = makeResampleInstance("CV", iters = 5, task = credit.task,stratify=TRUE)
+```
+
+
+
+
+
+```{r}
+logisticLrn = makeLearner("classif.multinom", predict.type = "prob", predict.threshold = th, trace = FALSE)
+
+logisticR = resample(logisticLrn, credit.task, resampling = rin, measures = list(credit.costs, mmce), show.info = FALSE)
+
+logisticR
+
+calculateConfusionMatrix(logisticR$pred)
+```
+ 
+```{r}
+c50rin = makeResampleInstance("CV", iters = 2, task = credit.task,stratify=TRUE)
+c50Lrn = makeLearner("classif.C50", predict.type = "prob", predict.threshold = th)
+c50R = resample(c50Lrn, credit.task, resampling = c50rin, measures = list(credit.costs, mmce), show.info = FALSE)
+c50R
+calculateConfusionMatrix(c50R$pred)
+```
+ 
+ 
+ - If we are also interested in the cross-validated performance for the default threshold values we can call setThreshold on the resample prediction r$pred.
+
+- Cross-validated performance with default thresholds
+```{r}
+performance(setThreshold(logisticR$pred, 0.5), measures = list(credit.costs, mmce))
+calculateConfusionMatrix(setThreshold(logisticR$pred, 0.5))
+```
+
+```{r}
+performance(setThreshold(c50R$pred, 0.5), measures = list(credit.costs, mmce))
+calculateConfusionMatrix(setThreshold(c50R$pred, 0.5))
+```
+
+
+Theoretical threshold vs Performance
+========================================================
+- Theoretical thresholding is only reliable if the predicted posterior probabilities are correct. If there is bias the thresholds have to be shifted accordingly.
+
+-Useful in this regard is function "plotThreshVsPerf"" that you can use to plot the average costs as well as any other performance measure versus possible threshold values for the positive class in [0,1]. The underlying data is generated by "generateThreshVsPerfData".
+
+-The following plots show the cross-validated costs and error rate (mmce). The theoretical threshold th calculated above is indicated by the vertical line. As you can see from the left-hand plot the theoretical threshold seems a bit large.
+
+Vertical line is theoretical threshhold value.
+```{r}
+ld = generateThreshVsPerfData(logisticR, measures = list(fpr, tpr, credit.costs, mmce))
+plotThreshVsPerf(ld, mark.th = th)
+plotROCCurves(ld)
+performance(logisticR$pred, credit.costs)
+```
+
+```{r}
+cd = generateThreshVsPerfData(c50R, measures = list(fpr, tpr, credit.costs, mmce))
+plotThreshVsPerf(cd, mark.th = th)
+plotROCCurves(cd)
+performance(c50R$pred, credit.costs)
+```
+
+Learning Curve for various learners
+========================================================
+```{r}
+r = generateLearningCurveData(
+  learners = c("classif.multinom","classif.C50","classif.randomForest","classif.binomial","classif.naiveBayes","classif.nnet","classif.rpart"),
+  task = credit.task,
+  percs = seq(0.1, 1, by = 0.2),
+  measures = list(credit.costs,mmce),
+  resampling = rin,
+  show.info = FALSE)
+plotLearningCurve(r)
+```
+
+
+
+
+RandomForest model:
+========================================================================
+```{r}
+Randomlrn = makeLearner("classif.randomForest", predict.type = "prob", fix.factors.prediction = TRUE)
+rin = makeResampleInstance("CV", iters = 5, task = credit.task,stratify=TRUE)
+Ranr = resample(Randomlrn, credit.task, rin, measures = list(credit.costs, mmce), show.info = FALSE)
+Ranr
+```
+
+
+Prediction based on theoretical threshold
+```{r}
+Ranpred.th = setThreshold(Ranr$pred, threshold = th)
+calculateConfusionMatrix(Ranpred.th)
+performance(Ranpred.th, measures = list(credit.costs, mmce))
+```
+
+Tuning Threshold
+```{r}
+dr = generateThreshVsPerfData(Ranr, measures = list(fpr, tpr, credit.costs, mmce))
+plotThreshVsPerf(dr, mark.th = th)
+plotROCCurves(dr)
+performance(Ranr$pred,credit.costs)
+```
+
+
+Naive Bayes Model: 
+================================================================
+```{r}
+NBlrn = makeLearner("classif.naiveBayes", predict.type = "prob", fix.factors.prediction = TRUE)
+rin = makeResampleInstance("CV", iters = 5, task = credit.task,stratify=TRUE)
+NBr = resample(NBlrn, credit.task, rin, measures = list(credit.costs, mmce), show.info = FALSE)
+NBr
+```
+
+
+```{r}
+NBpred.th = setThreshold(NBr$pred, threshold = th)
+calculateConfusionMatrix(NBpred.th)
+performance(NBpred.th, measures = list(credit.costs, mmce))
+```
+
+
+```{r}
+Nr = generateThreshVsPerfData(NBr, measures = list(fpr, tpr, credit.costs, mmce))
+plotThreshVsPerf(Nr, mark.th = th)
+plotROCCurves(Nr)
+performance(NBr$pred,credit.costs)
+```
+
+Binomial Model
+=======================================================
+
+```{r}
+Blrn = makeLearner("classif.binomial", predict.type = "prob", fix.factors.prediction = TRUE)
+rin = makeResampleInstance("CV", iters = 5, task = credit.task,stratify=TRUE)
+Br = resample(Blrn, credit.task, rin, measures = list(credit.costs, mmce), show.info = FALSE)
+Br
+```
+
+```{r}
+Bpred.th = setThreshold(Br$pred, threshold = th)
+calculateConfusionMatrix(Bpred.th)
+performance(Bpred.th, measures = list(credit.costs, mmce))
+```
+
+
+```{r}
+Bir = generateThreshVsPerfData(Br, measures = list(fpr, tpr, credit.costs, mmce))
+plotThreshVsPerf(Bir, mark.th = th)
+plotROCCurves(Bir)
+performance(Br$pred,credit.costs)
+```
+
+
+
+Neural Net Model
+=======================================================
+
+```{r}
+NNetlrn = makeLearner("classif.nnet", predict.type = "prob", fix.factors.prediction = TRUE)
+rin = makeResampleInstance("CV", iters = 5, task = credit.task,stratify=TRUE)
+NNetr = resample(NNetlrn, credit.task, rin, measures = list(credit.costs, mmce), show.info = FALSE)
+NNetr
+```
+
+```{r}
+NNpred.th = setThreshold(NNetr$pred, threshold = th)
+calculateConfusionMatrix(NNpred.th)
+performance(NNpred.th, measures = list(credit.costs, mmce))
+```
+
+
+```{r}
+NNr = generateThreshVsPerfData(NNetr, measures = list(fpr, tpr, credit.costs, mmce))
+plotThreshVsPerf(NNr, mark.th = th)
+plotROCCurves(NNr)
+performance(NNetr$pred,credit.costs)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
