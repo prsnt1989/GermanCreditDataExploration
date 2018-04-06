@@ -1,0 +1,87 @@
+---
+title: "German Credit Data Exploration_3"
+author: "Dr. Prashant Mishra"
+date: "3/26/2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+1. Import the Clean data
+======================================================
+We already have a clean file "german_credit_full.csv" to import. 
+```{r}
+credit_dataset <- read.csv("german_credit_full.csv",stringsAsFactors = TRUE)
+str(credit_dataset)
+```
+
+
+```{r}
+credit_dataset$Duration <- cut(credit_dataset$Duration, c(0,6,12,18,24,30,36,42,48,54,60,66,72,78),labels = c("0.to.6","6.to.12","12.to.18","18.to.24","24.to.30","30.to.36","36.to.42","42.to.48","48.to.54","54.to.60","60.to.66","66.to.72","72.to.78"))
+credit_dataset$Amount <- cut(credit_dataset$Amount, c(0,25,30,35,40,50,60,70,80),labels = c("0.to.25","25.to.30","30.to.35","35.to.40","40.to.50","50.to.60","60.to.70","70.to.80"))
+
+credit_dataset$Age <- cut(credit_dataset$Age, c(0,6,12,18,24,30,36,42,48,54,60,66,72,78),labels = c("0.to.6","6.to.12","12.to.18","18.to.24","24.to.30","30.to.36","36.to.42","42.to.48","48.to.54","54.to.60","60.to.66","66.to.72","72.to.78"))
+
+credit_dataset$InstallmentRatePercentage <- as.factor(credit_dataset$InstallmentRatePercentage)
+credit_dataset$ResidenceDuration <- as.factor(credit_dataset$ResidenceDuration)
+credit_dataset$NumberExistingCredits <- as.factor(credit_dataset$NumberExistingCredits)
+credit_dataset$InstallmentRatePercentage <- as.factor(credit_dataset$InstallmentRatePercentage)
+```
+Save everything to a csv file, so that it is reusable
+```{r}
+save(credit_dataset, file = 'credit_dataset')
+write.csv(credit_dataset, 'credit_dataset.csv',
+          row.names = FALSE)
+```
+
+
+
+```{r}
+str(credit_dataset)
+```
+
+
+Let's prepare the data for modelling
+========================================================
+- Make it all numerical data
+- Pivot all categorical data such that each category reprsents a column
+
+```{r}
+library(dplyr)
+library(dummies)
+credit_dataset_withoutclass <- credit_dataset %>% select(c(-Class))
+ml_credit_dataset <- dummy.data.frame(credit_dataset_withoutclass, sep = ".")
+ml_credit_dataset$Class <- credit_dataset$Class
+str(ml_credit_dataset)
+```
+```{r}
+save(ml_credit_dataset, file = 'ml_credit_dataset')
+write.csv(ml_credit_dataset, 'ml_credit_dataset.csv',
+          row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
