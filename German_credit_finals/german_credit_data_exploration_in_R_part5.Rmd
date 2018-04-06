@@ -1,0 +1,206 @@
+---
+title: "German Credit Data Exploration_5"
+author: "Dr. Prashant Mishra"
+date: "3/27/2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+ml_credit_dataset <- read.csv("ml_credit_dataset.csv")
+str(ml_credit_dataset)
+```
+
+Making a Machine Learning task using mlr
+========================================================
+
+```{r}
+library(mlr)
+credit.task = makeClassifTask(data = ml_credit_dataset, target = "Class")
+credit.task = removeConstantFeatures(credit.task)
+credit.task
+```
+
+Cost Matrix for German Credit Data
+```{r}
+costs = matrix(c(0, 1, 5, 0), 2)
+colnames(costs) = rownames(costs) = getTaskClassLevels(credit.task)
+costs
+```
+
+Calculate the theoretical threshold for the positive class:
+Since c(+1,+1)=c(-1,-1)=0
+```{r}
+th = costs[2,1]/(costs[2,1] + costs[1,2])
+th
+```
+
+Creating a cost measure
+========================================================
+In order to calculate the average costs over the entire data set we first need to create a new performance Measure. This can be done through function makeCostMeasure. It is expected that the rows of the cost matrix indicate true and the columns predicted class labels.
+```{r}
+credit.costs = makeCostMeasure(id = "credit.costs", name = "Credit costs", costs = costs,
+  best = 0, worst = 5)
+credit.costs
+```
+
+
+2. Rebalancing
+========================================================
+-In order to minimize the average costs, observations from the less costly class should be given higher importance during training. 
+
+-This can be achieved by weighting the classes, provided that the learner under consideration has a 'class weights' or an 'observation weights' argument.
+
+i. Weighing
+========================================================
+Just as theoretical thresholds, theoretical weights can be calculated from the cost matrix. If t indicates the target threshold and t0 the original threshold for the positive class the proportion of observations in the positive class has to be multiplied by
+
+$w= \frac{1-t}{t}\frac{t_0}{1-t_0}$
+
+for our case: Weight for positive class corresponding to theoretical treshold
+```{r}
+w = (1 - th)/th
+w
+```
+
+Assigning theoretical weight : for learner that support observation weights
+=======================================================
+-A unified and convenient way to assign class weights to a Learner (and tune them) is provided by function makeWeightedClassesWrapper.
+
+-The class weights are specified using argument wcw.weight
+
+-For learners that support observation weights a suitable weight vector is then generated internally during training or resampling.
+
+```{r}
+wlrn = makeLearner("classif.multinom", trace = FALSE)
+wlrn = makeWeightedClassesWrapper(wlrn, wcw.weight = w)
+wlrn
+rin = makeResampleInstance("CV", iters = 5, task = credit.task,stratify = TRUE)
+wr = resample(wlrn, credit.task, rin, measures = list(credit.costs, mmce), show.info = FALSE)
+wr
+```
+
+Assigning theoretical weight : for learner that support class weights
+===================================================
+
+- If the learner can deal with class weights, the weights are basically passed on to the appropriate learner parameter. 
+
+- The advantage of using the wrapper in this case is the unified way to specify the class weights.
+
+- For classification methods like "classif.multinom" that support class weights you can pass them directly.
+
+```{r}
+lrn = makeWeightedClassesWrapper("classif.multinom", wcw.weight = w)
+r = resample(lrn, credit.task, rin, measures = list(credit.costs, mmce), show.info = FALSE)
+r
+```
+
+Tuning the weight
+=======================================================
+-Just like the theoretical threshold, the theoretical weights may not always be suitable, therefore you can tune the weight for the positive class.
+
+-Calculating the theoretical weight beforehand may help to narrow down the search interval.
+```{r}
+lrn = makeLearner("classif.multinom", trace = FALSE)
+lrn = makeWeightedClassesWrapper(lrn)
+ps = makeParamSet(makeDiscreteParam("wcw.weight", seq(4, 12, 0.5)))
+ctrl = makeTuneControlGrid()
+tune.wcw.res = tuneParams(lrn, credit.task, resampling = rin, par.set = ps,
+  measures = list(credit.costs, mmce), control = ctrl, show.info = FALSE)
+tune.wcw.res
+as.data.frame(tune.wcw.res$opt.path)[1:3]
+```
+
+ii. Over- and undersampling
+========================================================
+-If the Learner supports neither observation nor class weights the proportions of the classes in the training data can be changed by over- or undersampling.
+
+-In the GermanCredit data set the positive class Bad should receive a theoretical weight of w = (1 - th)/th = 5. This can be achieved by oversampling class Bad with a rate of 5 or by undersampling class Good with a rate of 1/5 (using functions oversample or undersample).
+
+logistic model
+```{r}
+credit.task.over = oversample(credit.task, rate = w, cl = "Bad")
+logisticlrn = makeLearner("classif.multinom", trace = FALSE)
+logisticmod = mlr::train(logisticlrn, credit.task.over)
+logisticpred = predict(logisticmod, task = credit.task)
+performance(logisticpred, measures = list(credit.costs, mmce))
+```
+
+Rpart model
+```{r}
+credit.task.over = oversample(credit.task, rate = w, cl = "Bad")
+rpartlrn = makeLearner("classif.rpart")
+rpartmod = mlr::train(rpartlrn, credit.task.over)
+rpartpred = predict(rpartmod, task = credit.task)
+performance(rpartpred, measures = list(credit.costs, mmce))
+```
+
+Resample data to get appropriate performance
+========================================================
+-We usually prefer resampled performance values, but simply calling resample on the oversampled task does not work since predictions have to be based on the original task. 
+
+-The solution is to create a wrapped Learner via function makeOversampleWrapper. 
+
+-Internally, oversample is called before training, but predictions are done on the original data.
+
+logistic model
+```{r}
+logicallrn = makeLearner("classif.multinom", trace = FALSE)
+logicallrn = makeOversampleWrapper(logicallrn, osw.rate = w, osw.cl = "Bad")
+logicallrn
+lr = resample(logicallrn, credit.task, rin, measures = list(credit.costs, mmce), show.info = FALSE)
+lr
+```
+
+Rpart model
+```{r}
+rpartlrn = makeLearner("classif.rpart")
+rpartlrn = makeOversampleWrapper(rpartlrn, osw.rate = w, osw.cl = "Bad")
+rpartlrn
+rr = resample(logicallrn, credit.task, rin, measures = list(credit.costs, mmce), show.info = FALSE)
+rr
+```
+
+Tuning the oversample rate
+========================================================
+-Of course, we can also tune the oversampling rate. For this purpose we again have to create an OversampleWrapper. Optimal values for parameter osw.rate can be obtained using function tuneParams.
+
+logistic model
+```{r}
+logicallrn = makeLearner("classif.multinom", trace = FALSE)
+logicallrn = makeOversampleWrapper(logicallrn, osw.cl = "Bad")
+logicalps = makeParamSet(makeDiscreteParam("osw.rate", seq(3, 8, 0.25)))
+logicalctrl = makeTuneControlGrid()
+logicaltune.osw.res = tuneParams(logicallrn, credit.task, rin, par.set = logicalps, measures = list(credit.costs, mmce),
+  control = logicalctrl, show.info = FALSE)
+logicaltune.osw.res
+```
+
+Rpart model
+```{r}
+rpartlrn = makeLearner("classif.rpart")
+rpartlrn = makeOversampleWrapper(rpartlrn, osw.cl = "Bad")
+rpartps = makeParamSet(makeDiscreteParam("osw.rate", seq(3, 8, 0.25)))
+rpartctrl = makeTuneControlGrid()
+rparttune.osw.res = tuneParams(rpartlrn, credit.task, rin, par.set = rpartps, measures = list(credit.costs, mmce),
+  control = rpartctrl, show.info = FALSE)
+rparttune.osw.res
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
