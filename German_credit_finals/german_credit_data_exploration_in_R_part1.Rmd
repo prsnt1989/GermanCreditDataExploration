@@ -1,0 +1,380 @@
+---
+title: "German Credit Data Exploration_1"
+author: "Dr. Prashant Mishra"
+date: "3/26/2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Outline
+========================================================
+Main goal of this task is to predict the Class of a loan profile.
+
+- Step 1 : Import Raw Data
+
+- Step 2 : Clean Data
+
+- Step 3 : Data Exploration : Visual & Statistic
+
+- Step 4 : Prepare the data for Machine Learning Model
+
+- Step 5 : Prepare the ML model for training and define the Cost Function
+
+- Step 6 : Tune the parameter to minimize the cost further
+
+
+1. Import Raw Data 
+==========================================================
+```{r}
+url = 'https://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/german.data'
+
+df <- read.table(url, sep=' ', header = 0)
+
+head(df,n=5)
+```
+
+
+```{r}
+str(df)
+```
+As it is the data doesn't tell you much. We don't even know what each column represents let alone the values within the column. Our first task is to clean it so that we can perform intial exploration. 
+
+
+2. Clean the Raw Data
+========================================================
+
+Since this dataframe is not that huge (only 21 columns and max 10 factors within each column), we will build a new DataFrame "german_credit"" from the loaded dataframe with desired details column by column.
+
+i. Add "Class"" attribute
+
+Adding the Class attribute to the german credit data which is the indicator of whether the profile is good or bad.
+
+```{r}
+german_credit <- data.frame(Class = df$V21)
+german_credit$Class <- 'Good'
+german_credit$Class[df$V21 == 2] <- 'Bad'
+```
+
+ii. Add "CheckingAccountStatus" attribute
+
+Adding the Class attribute to the german credit data which is the indicator of whether the profile is good or bad.
+-Attribute 1: (qualitative) 
+- Status of existing checking account 
+- A11 : ... < 0 DM  (We will say 'lt.0')
+- A12 : 0 <= ... < 200 DM (We will say '0.to.200')
+- A13 : ... >= 200 DM / salary assignments for at least 1 year (We will say 'gt.200')
+- A14 : no checking account (We will say 'none')
+
+```{r}
+german_credit$CheckingAccountStatus <- df$V1
+levels(german_credit$CheckingAccountStatus) <- c('lt.0'
+                                                ,'0.to.200'
+                                                ,'gt.200'
+                                                ,'none'
+)
+```
+
+iii. Add "Duration" attribute
+
+- Attribute 2: (numerical) 
+- Duration in month 
+
+```{r}
+german_credit$Duration <- df$V2
+```
+
+iv. Add "CreditHistory" attribute
+
+- Attribute 3: (qualitative) 
+- Credit history 
+- A30 : no credits taken/ all credits paid back duly(We will say 'NoCredit.AllPaid')
+- A31 : all credits at this bank paid back duly (We will say 'ThisBank.AllPaid')
+- A32 : existing credits paid back duly till now (We will say 'PaidDuly')
+- A33 : delay in paying off in the past (We will say 'Delay')
+- A34 : critical account/ other credits existing (not at this bank) (We will say 'Critical')
+
+```{r}
+german_credit$CreditHistory <- df$V3
+levels(german_credit$CreditHistory) <- c(
+  'NoCredit.AllPaid'
+  ,'ThisBank.AllPaid'
+  ,'PaidDuly'
+  ,'Delay'
+  ,'Critical'
+)
+```
+
+v. Add "Purpose" attribute
+
+- Attribute 4: (qualitative) 
+-  Purpose 
+- A40 : car (new) 
+- A41 : car (used) 
+- A42 : furniture/equipment 
+- A43 : radio/television 
+- A44 : domestic appliances 
+- A45 : repairs 
+- A46 : education 
+- A47 : (vacation - does not exist?) 
+- A48 : retraining 
+- A49 : business 
+- A410 : others 
+
+```{r}
+german_credit$Purpose <- df$V4
+
+levels(german_credit$Purpose) <- c(
+  'NewCar'
+  ,'UsedCar'
+  ,'Others'
+  ,'Furniture.Equipment'
+  ,'Radio.Television' 
+  ,'DomesticAppliance'
+  ,'Repairs' 
+  ,'Education'
+  ,'Retraining' 
+  ,'Business'
+)
+```
+
+
+vi. Add "Amount" attribute
+
+- Attribute 5: (numerical) 
+- Credit amount 
+```{r}
+german_credit$Amount <- df$V5
+```
+
+vii. Add "SavingsAccountBonds" attribute
+
+- Attibute 6: (qualitative) 
+- Savings account/bonds 
+- A61 : ... < 100 DM (We will say 'lt.100')
+- A62 : 100 <= ... < 500 DM (We will say '100.to.500')
+- A63 : 500 <= ... < 1000 DM (We will say '500.to.1000')
+- A64 : .. >= 1000 DM (We will say 'gt.1000')
+- A65 : unknown/ no savings account (We will say 'Unknown')
+```{r}
+german_credit$SavingsAccountBonds <- df$V6
+levels(german_credit$SavingsAccountBonds) <- c(
+  'lt.100'
+  ,'100.to.500'
+  ,'500.to.1000'
+  ,'gt.1000'
+  ,'Unknown'
+)
+```
+
+
+viii. Add "EmploymentDuration" attribute
+
+- Attribute 7: (qualitative) 
+- Present employment since 
+- A71 : unemployed (We will say 'Unemployed')
+- A72 : ... < 1 year (We will say '0.to.1')
+- A73 : 1 <= ... < 4 years (We will say '1.to.4')
+- A74 : 4 <= ... < 7 years (We will say '4.to.7')
+- A75 : .. >= 7 years (We will say 'gt.7')
+```{r}
+german_credit$EmploymentDuration <- df$V7
+levels(german_credit$EmploymentDuration) <- c(
+  'Unemployed'
+  ,'0.to.1'
+  ,'1.to.4'
+  ,'4.to.7'
+  ,'gt.7'
+)
+```
+
+ix. Add "InstallmentRatePercentage" attribute
+
+- Attribute 8: (numerical) 
+- Installment rate in percentage of disposable income 
+```{r}
+german_credit$InstallmentRatePercentage <- df$V8
+```
+
+x. Add "Personal" attribute
+
+- Attribute 9: (qualitative) 
+- Personal status and sex 
+- A91 : male : divorced/separated (We will say 'Male.Divorced.Seperated')
+- A92 : female : divorced/separated/married (We will say 'Female.NotSingle')
+- A93 : male : single (We will say 'Male.Single')
+- A94 : male : married/widowed (We will say 'Male.Married.Widowed')
+- A95 : female : single (We will say 'Female.Single'... does not exist)
+
+```{r}
+german_credit$Personal <- df$V9
+levels(german_credit$Personal) <- c(
+  'Male.Divorced.Seperated'
+  ,'Female.NotSingle'
+  ,'Male.Single'
+  ,'Male.Married.Widowed'
+)
+```
+
+
+xi. Add "OtherDebtorsGuarantors" attribute
+
+- Attribute 10: (qualitative) 
+- Other debtors / guarantors 
+- A101 : none  (We will say 'None')
+- A102 : co-applicant (We will say 'CoApplicant')
+- A103 : guarantor (We will say 'Guarantor')
+```{r}
+german_credit$OtherDebtorsGuarantors <- df$V10
+levels(german_credit$OtherDebtorsGuarantors) <- c(
+  'None'
+  ,'CoApplicant'
+  ,'Guarantor'
+)
+```
+
+
+xii. Add "ResidenceDuration" attribute
+
+- Attribute 11: (numerical) 
+- Present residence since 
+```{r}
+german_credit$ResidenceDuration <- df$V11
+```
+
+
+xiii. Add "Property" attribute
+
+- Attribute 12: (qualitative) 
+- Property 
+- A121 : real estate (We will say 'RealEstate')
+- A122 : if not A121 : building society savings agreement/ life insurance (We will say 'Insurance')
+- A123 : if not A121/A122 : car or other, not in attribute 6 (We will say 'CarOther')
+- A124 : unknown / no property (We will say 'Unknown')
+```{r}
+german_credit$Property <- df$V12
+levels(german_credit$Property) <- c(
+  'RealEstate'
+  ,'Insurance'
+  ,'CarOther'
+  ,'Unknown'
+)
+```
+
+
+
+xiv. Add "Age" attribute
+
+- Attribute 13: (numerical) 
+- Age in years 
+```{r}
+german_credit$Age <- df$V13
+```
+
+xv. Add "OtherInstallmentPlans" attribute
+
+- Attribute 14: (qualitative) 
+- Other installment plans 
+- A141 : bank 
+- A142 : stores 
+- A143 : none 
+```{r}
+german_credit$OtherInstallmentPlans <- df$V14
+levels(german_credit$OtherInstallmentPlans) <- c(
+  'Bank'
+  ,'Stores'
+  ,'None'
+)
+```
+
+xvi. Add "Housing" attribute
+
+- Attribute 15: (qualitative) 
+- Housing 
+- A151 : rent 
+- A152 : own 
+- A153 : for free
+```{r}
+german_credit$Housing <- df$V15
+levels(german_credit$Housing) <- c('Rent', 'Own', 'ForFree')
+```
+
+xvii. Add "NumberExistingCredits" attribute
+
+- Attribute 16: (numerical) 
+- Number of existing credits at this bank
+```{r}
+german_credit$NumberExistingCredits <- df$V16
+```
+
+
+xviii. Add "Job" attribute
+
+- Attribute 17: (qualitative) 
+- Job 
+- A171 : unemployed/ unskilled - non-resident (We will say 'UnemployedUnskilled')
+- A172 : unskilled - resident (We will say 'UnskilledResident')
+- A173 : skilled employee / official (We will say 'SkilledEmployee')
+- A174 : management/ self-employed/ (We will say 'Management.SelfEmp.HighlyQualified')  highly qualified employee/ officer 
+```{r}
+german_credit$Job <- df$V17
+levels(german_credit$Job) <- c(
+  'UnemployedUnskilled'
+  ,'UnskilledResident'
+  ,'SkilledEmployee'
+  ,'Management.SelfEmp.HighlyQualified'
+)
+```
+
+xix. Add "NumberPeopleMaintenance" attribute
+
+- Attribute 18: (numerical) 
+- Number of people being liable to provide maintenance for
+```{r}
+german_credit$NumberPeopleMaintenance <- df$V18
+```
+
+xx. Add "Telephone" attribute
+
+- Attribute 19: (qualitative) 
+- Telephone 
+- A191 : none (We will say 0)
+- A192 : yes, registered under the customers name (We will say 1)
+```{r}
+german_credit$Telephone <- df$V19
+levels(german_credit$Telephone) <- c(
+  0
+  ,1
+)
+```
+
+xxi. Add "ForeignWorker" attribute
+
+- Attribute 20: (qualitative) 
+- foreign worker 
+- A201 : yes 
+- A202 : no 
+```{r}
+german_credit$ForeignWorker <- df$V20
+levels(german_credit$ForeignWorker) <- c(1, 0)
+```
+
+Finally let's save all these changes into a file, which we can import anytime without going through all these steps. 
+
+```{r}
+save(german_credit, file = 'german_credit')
+write.csv(german_credit, 'german_credit_full.csv',
+          row.names = FALSE)
+```
+
+
+
+
+
+
+
+
